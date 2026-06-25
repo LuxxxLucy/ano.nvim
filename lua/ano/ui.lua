@@ -76,8 +76,15 @@ function M.open_input(opts)
     on_confirm = opts.on_confirm,
   }
 
-  vim.keymap.set({ "n", "i" }, "<leader><CR>", function()
+  vim.keymap.set("n", "<leader><CR>", function()
     M.confirm(bufnr)
+  end, { buffer = bufnr, silent = true, desc = "Confirm Ano annotation" })
+
+  vim.keymap.set("i", "<leader><CR>", function()
+    vim.cmd.stopinsert()
+    vim.schedule(function()
+      M.confirm(bufnr)
+    end)
   end, { buffer = bufnr, silent = true, desc = "Confirm Ano annotation" })
 
   vim.keymap.set("n", "q", function()
