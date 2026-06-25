@@ -6,7 +6,6 @@ local M = {}
 
 local function copy_annotation(annotation)
   local copied = vim.tbl_extend("force", {}, annotation)
-  copied.stale = util.is_stale(annotation)
   copied.location = util.location(annotation)
   return copied
 end
@@ -38,16 +37,25 @@ local function fence_for(text)
   return string.rep("`", length)
 end
 
-local function code_language(annotation)
-  if vim.filetype and vim.filetype.match and annotation.file and annotation.file ~= "" then
-    local ok, filetype = pcall(vim.filetype.match, { filename = annotation.file })
-    if ok and filetype then
-      return filetype
-    end
+local function comment_label(annotation)
+  local id = tostring(annotation.id or "")
+  local prefix = config.get().id_prefix or ""
+  local label = id
+
+  if prefix ~= "" and id:sub(1, #prefix) == prefix then
+    label = id:sub(#prefix + 1)
+  elseif id:match("%d+$") then
+    label = id:match("%d+$")
   end
 
-  local extension = vim.fn.fnamemodify(annotation.file or "", ":e")
-  return extension ~= "" and extension or "text"
+  return "Comment " .. label
+end
+
+local function file_label(annotation)
+  if annotation.relfile and annotation.relfile ~= "" then
+    return annotation.relfile
+  end
+  return util.rel_file(annotation.file or "")
 end
 
 -- Mirror the latest export to /tmp/ano/<name>, a fixed memorable path,
@@ -68,20 +76,14 @@ end
 
 local function append_code(lines, annotation)
   local fence = fence_for(annotation.code)
-  table.insert(lines, fence .. code_language(annotation))
+  table.insert(lines, fence)
   append_text(lines, annotation.code)
   table.insert(lines, fence)
 end
 
 function M.markdown(opts)
   local annotations = filtered_annotations(opts)
-  local lines = {
-    "# Ano Review Annotations",
-    "",
-    "- Project: " .. vim.fn.getcwd(),
-    "- Generated: " .. util.now(),
-    "",
-  }
+  local lines = {}
 
   if #annotations == 0 then
     table.insert(lines, "_No annotations to export._")
@@ -89,26 +91,23 @@ function M.markdown(opts)
     return table.concat(lines, "\n")
   end
 
+  local current_file
   for _, annotation in ipairs(annotations) do
-    local status = annotation.status or "open"
-    if annotation.stale then
-      status = status .. " stale"
+    local file = file_label(annotation)
+    if file ~= current_file then
+      if #lines > 0 then
+        table.insert(lines, "")
+      end
+      table.insert(lines, "# " .. file)
+      table.insert(lines, "")
+      current_file = file
     end
 
-    table.insert(lines, string.format("## %s %s", annotation.id, annotation.location))
-    table.insert(lines, "")
-    table.insert(lines, "- Status: " .. status)
-    table.insert(lines, "- Created: " .. (annotation.created_at or ""))
-    table.insert(lines, "- Updated: " .. (annotation.updated_at or ""))
-    table.insert(lines, "")
-    table.insert(lines, "Comment:")
-    table.insert(lines, "")
-    append_text(lines, annotation.comment)
-
-    table.insert(lines, "")
-    table.insert(lines, "Selected code:")
+    table.insert(lines, string.format("## %s %s", comment_label(annotation), annotation.location))
     table.insert(lines, "")
     append_code(lines, annotation)
+    table.insert(lines, "")
+    append_text(lines, annotation.comment)
     table.insert(lines, "")
   end
 
