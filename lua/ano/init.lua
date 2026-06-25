@@ -7,6 +7,8 @@ local util = require("ano.util")
 
 local M = {}
 
+local jump_to
+
 local function annotation_under_cursor()
   local bufnr = vim.api.nvim_get_current_buf()
   local file = util.buf_file(bufnr)
@@ -43,6 +45,39 @@ end
 local function save_and_refresh()
   storage.save()
   marks.refresh_all()
+end
+
+local function annotation_after(candidate, annotation)
+  if (candidate.file or "") ~= (annotation.file or "") then
+    return (candidate.file or "") > (annotation.file or "")
+  end
+  if (candidate.start_line or 0) ~= (annotation.start_line or 0) then
+    return (candidate.start_line or 0) > (annotation.start_line or 0)
+  end
+  return (candidate.id or "") > (annotation.id or "")
+end
+
+local function next_open_after(annotation)
+  local annotations = {}
+
+  for _, candidate in ipairs(storage.all()) do
+    if candidate.status ~= "resolved" then
+      table.insert(annotations, candidate)
+    end
+  end
+
+  annotations = util.sort_annotations(annotations)
+  if #annotations == 0 then
+    return nil
+  end
+
+  for _, candidate in ipairs(annotations) do
+    if annotation_after(candidate, annotation) then
+      return candidate
+    end
+  end
+
+  return annotations[1]
 end
 
 local function add_annotation(selection, comment)
@@ -135,6 +170,11 @@ function M.resolve_command(opts)
   annotation.updated_at = annotation.resolved_at
   save_and_refresh()
   util.notify("resolved " .. annotation.id)
+
+  local next_annotation = next_open_after(annotation)
+  if next_annotation then
+    jump_to(next_annotation)
+  end
 end
 
 function M.reopen_command(opts)
@@ -185,7 +225,7 @@ local function navigable_annotations()
   return util.sort_annotations(annotations)
 end
 
-local function jump_to(annotation)
+jump_to = function(annotation)
   if not annotation then
     util.notify("no annotations", vim.log.levels.WARN)
     return

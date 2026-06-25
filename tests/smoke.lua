@@ -83,7 +83,9 @@ assert_true(vim.api.nvim_buf_get_name(0) == "ano://preview", "preview buffer nam
 
 vim.cmd.edit(sample)
 vim.cmd("AnoResolve Ano1")
+assert_true(vim.api.nvim_win_get_cursor(0)[1] == annotations[3].start_line, "resolve should jump to next open annotation")
 vim.cmd("AnoResolve Ano3")
+assert_true(vim.api.nvim_win_get_cursor(0)[1] == annotations[2].start_line, "resolve by id should jump from the resolved annotation")
 vim.cmd("AnoSave " .. vim.fn.fnameescape(review_md))
 
 local markdown = read(review_md)
