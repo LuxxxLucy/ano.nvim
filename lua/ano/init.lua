@@ -387,10 +387,8 @@ function M.clear_command()
     end
   end
 
-  -- Offer "resolved only" only when there is something resolved to clear.
-  -- Each menu entry maps directly to the action it names; no index juggling.
   local actions, prompt
-  if resolved > 0 then
+  if resolved > 0 and resolved < total then
     actions = { "resolved", "all", "cancel" }
     prompt = string.format("Clear annotations? %d resolved, %d total.", resolved, total)
   else

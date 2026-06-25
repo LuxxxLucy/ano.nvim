@@ -143,4 +143,16 @@ assert_true(markdown:find("range note", 1, true) == nil, "deleted annotation sti
 
 vim.cmd("AnoStatus")
 vim.cmd("AnoYank")
+vim.cmd("AnoResolve Ano1")
+local confirm_menu
+local confirm = vim.fn.confirm
+vim.fn.confirm = function(_, menu)
+  confirm_menu = menu
+  return 1
+end
+vim.cmd("AnoClear")
+vim.fn.confirm = confirm
+assert_true(confirm_menu:find("Resolved only", 1, true) == nil, "clear should not offer resolved-only when all annotations are resolved")
+assert_true(confirm_menu:find("All", 1, true) ~= nil, "clear should offer all when all annotations are resolved")
+assert_true(#require("ano.storage").all() == 0, "clear all should remove all resolved annotations")
 vim.cmd("qa!")
