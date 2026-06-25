@@ -17,7 +17,8 @@ vim.fn.writefile({
   "return y",
 }, sample)
 
-require("ano").setup({ state_dir = state_dir, default_keymaps = false })
+vim.g.mapleader = " "
+require("ano").setup({ state_dir = state_dir, default_keymaps = true })
 
 local function assert_true(value, message)
   if not value then
@@ -29,10 +30,22 @@ local function read(path)
   return table.concat(vim.fn.readfile(path), "\n")
 end
 
+local function qf_items()
+  return vim.fn.getqflist({ items = 0 }).items
+end
+
+local function quickfix_win()
+  for _, info in ipairs(vim.fn.getwininfo()) do
+    if info.quickfix == 1 and info.loclist == 0 then
+      return info.winid
+    end
+  end
+  return nil
+end
+
 assert_true(vim.fn.exists(":AnoAdd") == 2, "AnoAdd command missing")
 assert_true(vim.fn.exists(":AnoSave") == 2, "AnoSave command missing")
 
-vim.g.mapleader = " "
 local input_done = false
 local input_text
 local input_mode
@@ -76,14 +89,29 @@ assert_true(grouped_markdown:find("## Comment 2 " .. util.location(annotations[2
 assert_true(grouped_markdown:find("```lua", 1, true) == nil, "Markdown export should use plain code fences")
 
 vim.cmd("AnoList")
-assert_true(#vim.fn.getqflist() == 3, "quickfix list should contain three annotations")
+local qf_win = quickfix_win()
+assert_true(qf_win ~= nil, "quickfix list window should be open")
+assert_true(#qf_items() == 3, "quickfix list should contain three annotations")
+
+vim.cmd.wincmd("p")
+vim.cmd("3AnoAdd list refresh note")
+assert_true(#qf_items() == 4, "quickfix list should refresh after add")
+vim.cmd("AnoDelete Ano4")
+assert_true(#qf_items() == 3, "quickfix list should refresh after delete")
+
+vim.api.nvim_set_current_win(qf_win)
+vim.api.nvim_win_set_cursor(qf_win, { 1, 0 })
+vim.api.nvim_feedkeys(" ar", "mxt", false)
+assert_true(vim.wait(1000, function()
+  return annotations[1].status == "resolved"
+end), "leader resolve should work in quickfix list")
+assert_true(qf_items()[1].text:find("[resolved]", 1, true) ~= nil, "quickfix list should refresh resolved status")
+assert_true(vim.api.nvim_win_get_cursor(0)[1] == annotations[3].start_line, "quickfix resolve should jump to next open annotation")
 
 vim.cmd("AnoPreview")
 assert_true(vim.api.nvim_buf_get_name(0) == "ano://preview", "preview buffer name mismatch")
 
 vim.cmd.edit(sample)
-vim.cmd("AnoResolve Ano1")
-assert_true(vim.api.nvim_win_get_cursor(0)[1] == annotations[3].start_line, "resolve should jump to next open annotation")
 vim.cmd("AnoResolve Ano3")
 assert_true(vim.api.nvim_win_get_cursor(0)[1] == annotations[2].start_line, "resolve by id should jump from the resolved annotation")
 vim.cmd("AnoSave " .. vim.fn.fnameescape(review_md))

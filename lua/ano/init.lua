@@ -8,8 +8,62 @@ local util = require("ano.util")
 local M = {}
 
 local jump_to
+local quickfix_title = "Ano annotations"
+
+local function quickfix_window_open()
+  for _, info in ipairs(vim.fn.getwininfo()) do
+    if info.quickfix == 1 and info.loclist == 0 then
+      return true
+    end
+  end
+
+  return false
+end
+
+local function focus_regular_window()
+  if vim.bo.buftype ~= "quickfix" then
+    return
+  end
+
+  for _, info in ipairs(vim.fn.getwininfo()) do
+    if info.quickfix == 0 and info.loclist == 0 and vim.api.nvim_win_is_valid(info.winid) then
+      vim.api.nvim_set_current_win(info.winid)
+      return
+    end
+  end
+end
+
+local function quickfix_annotation_under_cursor()
+  if vim.bo.buftype ~= "quickfix" then
+    return nil
+  end
+
+  local index = vim.api.nvim_win_get_cursor(0)[1]
+  local ok, quickfix = pcall(vim.fn.getqflist, { items = 0 })
+  if not ok or type(quickfix) ~= "table" or type(quickfix.items) ~= "table" then
+    return nil
+  end
+
+  local item = quickfix.items[index]
+  if not item then
+    return nil
+  end
+
+  local user_data = item.user_data
+  if type(user_data) == "table" and user_data.ano_id then
+    return storage.find(user_data.ano_id)
+  end
+
+  local id = item.text and item.text:match("^(%S+)")
+  return storage.find(id)
+end
 
 local function annotation_under_cursor()
+  local quickfix_annotation = quickfix_annotation_under_cursor()
+  if quickfix_annotation then
+    return quickfix_annotation
+  end
+
   local bufnr = vim.api.nvim_get_current_buf()
   local file = util.buf_file(bufnr)
   local line = vim.api.nvim_win_get_cursor(0)[1]
@@ -45,6 +99,9 @@ end
 local function save_and_refresh()
   storage.save()
   marks.refresh_all()
+  if quickfix_window_open() then
+    M.list_command(false)
+  end
 end
 
 local function annotation_after(candidate, annotation)
@@ -106,6 +163,9 @@ local function add_annotation(selection, comment)
 
   storage.add(annotation)
   marks.refresh(selection.bufnr)
+  if quickfix_window_open() then
+    M.list_command(false)
+  end
   util.notify(string.format("added %s", annotation.id))
 end
 
@@ -156,6 +216,9 @@ function M.delete_command(opts)
 
   storage.delete(annotation.id)
   marks.refresh_all()
+  if quickfix_window_open() then
+    M.list_command(false)
+  end
   util.notify("deleted " .. annotation.id)
 end
 
@@ -190,7 +253,12 @@ function M.reopen_command(opts)
   util.notify("reopened " .. annotation.id)
 end
 
-function M.list_command()
+local function quickfix_item_text(annotation)
+  local status = annotation.status == "resolved" and " [resolved]" or ""
+  return string.format("%s%s %s %s", annotation.id, status, util.location(annotation), util.first_comment_line(annotation.comment))
+end
+
+function M.list_command(open)
   local items = {}
 
   for _, annotation in ipairs(util.sort_annotations(vim.deepcopy(storage.all()))) do
@@ -198,15 +266,19 @@ function M.list_command()
       filename = annotation.file ~= "" and annotation.file or nil,
       lnum = annotation.start_line,
       end_lnum = annotation.end_line,
-      text = string.format("%s %s %s", annotation.id, util.location(annotation), util.first_comment_line(annotation.comment)),
+      text = quickfix_item_text(annotation),
+      user_data = { ano_id = annotation.id },
     })
   end
 
   vim.fn.setqflist({}, " ", {
-    title = "Ano annotations",
+    title = quickfix_title,
     items = items,
   })
-  vim.cmd.copen()
+
+  if open ~= false then
+    vim.cmd.copen()
+  end
 end
 
 local function navigable_annotations()
@@ -230,6 +302,8 @@ jump_to = function(annotation)
     util.notify("no annotations", vim.log.levels.WARN)
     return
   end
+
+  focus_regular_window()
 
   if annotation.file and annotation.file ~= "" then
     vim.cmd.edit(vim.fn.fnameescape(annotation.file))
@@ -331,9 +405,15 @@ function M.clear_command()
   if action == "resolved" then
     util.notify(string.format("cleared %d resolved annotations", storage.clear_resolved()))
     marks.refresh_all()
+    if quickfix_window_open() then
+      M.list_command(false)
+    end
   elseif action == "all" then
     util.notify(string.format("cleared %d annotations", storage.clear_all()))
     marks.refresh_all()
+    if quickfix_window_open() then
+      M.list_command(false)
+    end
   else
     util.notify("clear cancelled")
   end
