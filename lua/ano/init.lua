@@ -54,7 +54,7 @@ local function quickfix_annotation_under_cursor()
     return storage.find(user_data.ano_id)
   end
 
-  local id = item.text and item.text:match("^(%S+)")
+  local id = item.text and (item.text:match("^%[[x ]%]%s+(%S+)") or item.text:match("^(%S+)"))
   return storage.find(id)
 end
 
@@ -101,6 +101,19 @@ local function save_and_refresh()
   marks.refresh_all()
   if quickfix_window_open() then
     M.list_command(false)
+  end
+end
+
+local function refresh_quickfix_cursor(row)
+  if quickfix_window_open() then
+    M.list_command(false)
+  end
+
+  if vim.bo.buftype == "quickfix" then
+    local count = #vim.fn.getqflist()
+    if count > 0 then
+      vim.api.nvim_win_set_cursor(0, { math.max(1, math.min(row, count)), 0 })
+    end
   end
 end
 
@@ -253,9 +266,46 @@ function M.reopen_command(opts)
   util.notify("reopened " .. annotation.id)
 end
 
+function M.toggle_quickfix_command()
+  local annotation = quickfix_annotation_under_cursor()
+  if not annotation then
+    util.notify("no annotation under cursor", vim.log.levels.ERROR)
+    return
+  end
+
+  local row = vim.api.nvim_win_get_cursor(0)[1]
+  if annotation.status == "resolved" then
+    annotation.status = "open"
+    annotation.resolved_at = nil
+    annotation.updated_at = util.now()
+    storage.save()
+    marks.refresh_all()
+    refresh_quickfix_cursor(row)
+    util.notify("reopened " .. annotation.id)
+  else
+    annotation.status = "resolved"
+    annotation.resolved_at = util.now()
+    annotation.updated_at = annotation.resolved_at
+    storage.save()
+    marks.refresh_all()
+    refresh_quickfix_cursor(row)
+    util.notify("resolved " .. annotation.id)
+  end
+end
+
 local function quickfix_item_text(annotation)
-  local status = annotation.status == "resolved" and " [resolved]" or ""
-  return string.format("%s%s %s %s", annotation.id, status, util.location(annotation), util.first_comment_line(annotation.comment))
+  local check = annotation.status == "resolved" and "[x]" or "[ ]"
+  return string.format("%s %s %s %s", check, annotation.id, util.location(annotation), util.first_comment_line(annotation.comment))
+end
+
+local function set_quickfix_keymaps()
+  if vim.bo.buftype ~= "quickfix" then
+    return
+  end
+
+  vim.keymap.set("n", "<Space>", function()
+    M.toggle_quickfix_command()
+  end, { buffer = true, nowait = true, silent = true, desc = "Toggle Ano annotation" })
 end
 
 function M.list_command(open)
@@ -278,6 +328,7 @@ function M.list_command(open)
 
   if open ~= false then
     vim.cmd.copen()
+    set_quickfix_keymaps()
   end
 end
 

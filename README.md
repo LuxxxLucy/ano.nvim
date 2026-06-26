@@ -32,7 +32,7 @@ Commands take an optional id; without one they hit the annotation under the curs
 | `:AnoDelete [id]` | `ad` | delete |
 | `:AnoResolve [id]` | `ar` | resolve (kept, but out of exports) |
 | `:AnoReopen [id]` | `ao` | reopen |
-| `:AnoList` | `al` | quickfix list |
+| `:AnoList` | `al` | quickfix list; use space to toggles resolved status |
 | `:AnoNext` / `:AnoPrev` | `an` / `ap` | jump between annotations |
 | `:AnoPreview` | `av` | Markdown preview buffer |
 | `:AnoSave [path]` | `as` | write Markdown |

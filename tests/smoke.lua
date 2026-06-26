@@ -92,6 +92,7 @@ vim.cmd("AnoList")
 local qf_win = quickfix_win()
 assert_true(qf_win ~= nil, "quickfix list window should be open")
 assert_true(#qf_items() == 3, "quickfix list should contain three annotations")
+assert_true(qf_items()[1].text:find("^%[ %]") ~= nil, "quickfix list should show open checkboxes")
 
 vim.cmd.wincmd("p")
 vim.cmd("3AnoAdd list refresh note")
@@ -105,8 +106,22 @@ vim.api.nvim_feedkeys(" ar", "mxt", false)
 assert_true(vim.wait(1000, function()
   return annotations[1].status == "resolved"
 end), "leader resolve should work in quickfix list")
-assert_true(qf_items()[1].text:find("[resolved]", 1, true) ~= nil, "quickfix list should refresh resolved status")
+assert_true(qf_items()[1].text:find("^%[x%]") ~= nil, "quickfix list should show resolved checkboxes")
+assert_true(qf_items()[1].text:find("[resolved]", 1, true) == nil, "quickfix list should not use text status labels")
 assert_true(vim.api.nvim_win_get_cursor(0)[1] == annotations[3].start_line, "quickfix resolve should jump to next open annotation")
+
+vim.api.nvim_set_current_win(qf_win)
+vim.api.nvim_win_set_cursor(qf_win, { 1, 0 })
+vim.api.nvim_feedkeys(" ", "mxt", false)
+assert_true(vim.wait(1000, function()
+  return annotations[1].status == "open"
+end), "space should reopen quickfix annotation")
+assert_true(qf_items()[1].text:find("^%[ %]") ~= nil, "space should refresh open checkbox")
+vim.api.nvim_feedkeys(" ", "mxt", false)
+assert_true(vim.wait(1000, function()
+  return annotations[1].status == "resolved"
+end), "space should resolve quickfix annotation")
+assert_true(qf_items()[1].text:find("^%[x%]") ~= nil, "space should refresh resolved checkbox")
 
 vim.cmd("AnoPreview")
 assert_true(vim.api.nvim_buf_get_name(0) == "ano://preview", "preview buffer name mismatch")
